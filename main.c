@@ -12,7 +12,7 @@
 *
 ******************************************************************************
 *
-* Copyright (c) 2015-2021, Infineon Technologies AG
+* Copyright (c) 2015-2022, Infineon Technologies AG
 * All rights reserved.
 *
 * Boost Software License - Version 1.0 - August 17th, 2003
@@ -42,19 +42,22 @@
 *****************************************************************************/
 #include "cybsp.h"
 #include "cy_utils.h"
+#include <stdio.h>
+#include "cy_retarget_io.h"
 #include "xmc_wdt.h"
 #include "xmc_scu.h"
+
 
 /*******************************************************************************
 * Macros
 *******************************************************************************/
-#ifdef  TARGET_KIT_XMC14_BOOT_001
+#if (UC_SERIES == XMC14)
 #define COUNTS_DELAY                      (500000U)
 #define WDT_Prewarning_Interrupt_Handler  IRQ1_Handler
 #define INTERRUPT_PRIORITY_NODE_ID        IRQ1_IRQn
 #endif
 
-#ifdef  TARGET_KIT_XMC47_RELAX_V1
+#if (UC_SERIES == XMC47)
 #define WDT_Prewarning_Interrupt_Handler  NMI_Handler
 #define COUNTS_DELAY                      (2000000U)
 #endif
@@ -62,6 +65,15 @@
 #define TICKS_PER_SECOND                  (1000U)
 #define TICKS_WAIT                        (1000U)
 #define MAX_NUM_FEEDS                     (10U)
+
+/* Define macro to enable/disable printing of debug messages */
+#define ENABLE_XMC_DEBUG_PRINT (0)
+
+/* Define macro to set the loop count before printing debug messages */
+#if ENABLE_XMC_DEBUG_PRINT
+#define DEBUG_LOOP_COUNT_MAX                    2
+static bool WDT_SERVICE_DONE = false;
+#endif
 
 /*******************************************************************************
 * Data Structure
@@ -101,7 +113,13 @@ void SysTick_Handler(void)
         XMC_GPIO_ToggleOutput(CYBSP_USER_LED_PORT, CYBSP_USER_LED1_PIN);
         /*Service watchdog when count value of watchdog timer is between lower and upper window bounds*/
         XMC_WDT_Service();
+
+        #if ENABLE_XMC_DEBUG_PRINT
+        WDT_SERVICE_DONE = true;
+        #endif
+
         ticks = 0;
+
         feeds++;
     }
 }
@@ -121,8 +139,12 @@ void SysTick_Handler(void)
 *******************************************************************************/
 void WDT_Prewarning_Interrupt_Handler(void)
 {
+    #if (UC_SERIES == XMC14)
+    XMC_GPIO_ToggleOutput(CYBSP_USER_LED_PORT, CYBSP_USER_LED1_PIN);
+    #else
     /*User LED2 toggle due to  Prewarning of WDT*/
     XMC_GPIO_ToggleOutput(CYBSP_USER_LED_PORT, CYBSP_USER_LED2_PIN);
+    #endif
 }
 
 /*******************************************************************************
@@ -150,6 +172,11 @@ int main(void)
 {
     cy_rslt_t result;
 
+    #if ENABLE_XMC_DEBUG_PRINT
+    /* Assign false to disable printing of debug messages */
+    static volatile bool debug_printf = true;
+    #endif
+
     /*Initialize the device and board peripherals*/
     result = cybsp_init();
     if (result != CY_RSLT_SUCCESS)
@@ -157,9 +184,23 @@ int main(void)
         CY_ASSERT(0);
     }
 
+    /* Initialize printf retarget */
+    cy_retarget_io_init(CYBSP_DEBUG_UART_HW);
+
+    #if ENABLE_XMC_DEBUG_PRINT
+    printf("Initialization done\r\n");
+    #endif
+
+
+
     /*Check for the value representing the reason for device reset*/
     if ((XMC_SCU_RESET_GetDeviceResetReason() & XMC_SCU_RESET_REASON_WATCHDOG) != 0)
     {
+
+        #if ENABLE_XMC_DEBUG_PRINT
+        printf("Device reset\r\n");
+        #endif
+
         /*Clear system reset status*/
         XMC_SCU_RESET_ClearDeviceResetReason();
         while(1)
@@ -177,38 +218,53 @@ int main(void)
     /*Clear system reset status*/
     XMC_SCU_RESET_ClearDeviceResetReason();
 
-#ifdef  TARGET_KIT_XMC47_RELAX_V1
+    #if (UC_SERIES == XMC47)
     /*Use standby clock as watchdog clock source*/
     XMC_SCU_HIB_EnableHibernateDomain();
     XMC_SCU_CLOCK_SetWdtClockSource(XMC_SCU_CLOCK_WDTCLKSRC_STDBY);
     XMC_SCU_CLOCK_EnableClock(XMC_SCU_CLOCK_WDT);
-#endif
+    #endif
 
     /*Promote the prewarning alarm event to SCU interrupt*/
     XMC_SCU_INTERRUPT_EnableEvent(XMC_SCU_INTERRUPT_EVENT_WDT_WARN);
 
-#ifdef  TARGET_KIT_XMC14_BOOT_001
+    #if (UC_SERIES == XMC14)
     /*Enable Interrupt*/
     NVIC_EnableIRQ(INTERRUPT_PRIORITY_NODE_ID);
-#endif
+    #endif
    
-#ifdef  TARGET_KIT_XMC47_RELAX_V1
+    #if (UC_SERIES == XMC47)
     /*Enable NMI request*/
     XMC_SCU_INTERRUPT_EnableNmiRequest(XMC_SCU_NMIREQ_WDT_WARN);
-#endif
+    #endif
 
     /*Initializes and configures watchdog*/
     XMC_WDT_Init(&wdt_config);
 
     /*Start the watchdog timer*/
     XMC_WDT_Start();
+    #if ENABLE_XMC_DEBUG_PRINT
+    printf("WDT Started\r\n");
+    #endif
 
     /*Feed the watchdog periodically every 1s*/
     SysTick_Config(SystemCoreClock / TICKS_PER_SECOND);
 
+    #if ENABLE_XMC_DEBUG_PRINT
+    debug_printf = false;
+    #endif
+
     while(1)
     {
      /* Infinite loop */
+        #if ENABLE_XMC_DEBUG_PRINT
+        if(WDT_SERVICE_DONE && !debug_printf)
+        {
+            printf("WDT Serviced\r\n");
+            debug_printf = true;
+        }
+        #endif
+
     }
 }
 
