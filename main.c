@@ -40,25 +40,30 @@
 * DEALINGS IN THE SOFTWARE.
 *
 *****************************************************************************/
+
 #include "cybsp.h"
 #include "cy_utils.h"
 #include <stdio.h>
 #include "cy_retarget_io.h"
-#include "xmc_wdt.h"
-#include "xmc_scu.h"
-
 
 /*******************************************************************************
 * Macros
 *******************************************************************************/
+#if (UC_SERIES == XMC11) || (UC_SERIES == XMC12) || (UC_SERIES == XMC13)
+#define COUNTS_DELAY                      (200000U)
+#define WDT_Prewarning_Interrupt_Handler  SCU_1_IRQHandler
+#define INTERRUPT_PRIORITY_NODE_ID        SCU_1_IRQn
+#endif
+
 #if (UC_SERIES == XMC14)
 #define COUNTS_DELAY                      (500000U)
 #define WDT_Prewarning_Interrupt_Handler  IRQ1_Handler
 #define INTERRUPT_PRIORITY_NODE_ID        IRQ1_IRQn
 #endif
 
-#if (UC_SERIES == XMC47)
+#if (UC_SERIES == XMC48) || (UC_SERIES == XMC47) || (UC_SERIES == XMC45) || (UC_SERIES == XMC44) || (UC_SERIES == XMC43) || (UC_SERIES == XMC42)
 #define WDT_Prewarning_Interrupt_Handler  NMI_Handler
+#define INTERRUPT_PRIORITY_NODE_ID        SCU_0_IRQn
 #define COUNTS_DELAY                      (2000000U)
 #endif
 
@@ -74,18 +79,6 @@
 #define DEBUG_LOOP_COUNT_MAX                    2
 static bool WDT_SERVICE_DONE = false;
 #endif
-
-/*******************************************************************************
-* Data Structure
-*******************************************************************************/
-/* Structure for initializing watchdog timer*/
-XMC_WDT_CONFIG_t wdt_config =
-{
-    .window_lower_bound  = 30000,    /*Lower bound for servicing window (WLB)--Range: [0H to FFFFFFFFH]*/
-    .window_upper_bound  = 35000,    /*Upper bound for service window (WUB),Reset request is generated up on overflow of timer-Range: [0H to FFFFFFFFH]*/
-    .service_pulse_width = 255,      /*Service Indication Pulse Width (SPW)-Range: [0H to FFH]*/
-    .prewarn_mode        = true      /*Pre-warning mode (PRE). This accepts boolean values as input.*/
-};
 
 /*******************************************************************************
 * Function Name: SysTick Handler
@@ -125,6 +118,25 @@ void SysTick_Handler(void)
 }
 
 /*******************************************************************************
+ * Function Name: WDT_Prewarning_Interrupt_Handler
+ ********************************************************************************
+ * Summary:
+ * This is the interrupt handler function for Watchdog Prewarning  interrupt.
+ *
+ * Parameters:
+ *  none
+ *
+ * Return:
+ *  void
+ *
+ *******************************************************************************/
+void WDT_Prewarning_Interrupt_Handler(void)
+{
+    XMC_SCU_IRQHandler((uint32_t)INTERRUPT_PRIORITY_NODE_ID);
+}
+
+
+/*******************************************************************************
 * Function Name: WDT_Prewarning_Interrupt_Handler
 ********************************************************************************
 * Summary:
@@ -137,9 +149,9 @@ void SysTick_Handler(void)
 *  void
 *
 *******************************************************************************/
-void WDT_Prewarning_Interrupt_Handler(void)
+void Watchdog_Handler(void)
 {
-    #if (UC_SERIES == XMC14)
+    #if (UC_SERIES == XMC42)
     XMC_GPIO_ToggleOutput(CYBSP_USER_LED_PORT, CYBSP_USER_LED1_PIN);
     #else
     /*User LED2 toggle due to  Prewarning of WDT*/
@@ -218,28 +230,23 @@ int main(void)
     /*Clear system reset status*/
     XMC_SCU_RESET_ClearDeviceResetReason();
 
-    #if (UC_SERIES == XMC47)
+    #if (UC_SERIES == XMC48) || (UC_SERIES == XMC47) || (UC_SERIES == XMC45) || (UC_SERIES == XMC44) || (UC_SERIES == XMC43) || (UC_SERIES == XMC42)
     /*Use standby clock as watchdog clock source*/
     XMC_SCU_HIB_EnableHibernateDomain();
     XMC_SCU_CLOCK_SetWdtClockSource(XMC_SCU_CLOCK_WDTCLKSRC_STDBY);
     XMC_SCU_CLOCK_EnableClock(XMC_SCU_CLOCK_WDT);
     #endif
 
-    /*Promote the prewarning alarm event to SCU interrupt*/
-    XMC_SCU_INTERRUPT_EnableEvent(XMC_SCU_INTERRUPT_EVENT_WDT_WARN);
-
-    #if (UC_SERIES == XMC14)
+    #if (UC_SERIES == XMC11) || (UC_SERIES == XMC12) || (UC_SERIES == XMC13) || (UC_SERIES == XMC14)
     /*Enable Interrupt*/
     NVIC_EnableIRQ(INTERRUPT_PRIORITY_NODE_ID);
     #endif
+
    
-    #if (UC_SERIES == XMC47)
+    #if (UC_SERIES == XMC48) || (UC_SERIES == XMC47) || (UC_SERIES == XMC45) || (UC_SERIES == XMC44) || (UC_SERIES == XMC43) || (UC_SERIES == XMC42)
     /*Enable NMI request*/
     XMC_SCU_INTERRUPT_EnableNmiRequest(XMC_SCU_NMIREQ_WDT_WARN);
     #endif
-
-    /*Initializes and configures watchdog*/
-    XMC_WDT_Init(&wdt_config);
 
     /*Start the watchdog timer*/
     XMC_WDT_Start();
