@@ -13,8 +13,6 @@ This code example demonstrates the prewarning feature of the watchdog timer (WDT
 ## Supported toolchains (make variable 'TOOLCHAIN')
 
 - GNU Arm® embedded compiler v10.3.1 (`GCC_ARM`) - Default value of `TOOLCHAIN`
-- Arm&reg; compiler v6.16 (`ARM`)
-- IAR C/C++ compiler v9.30.1 (`IAR`)
 
 ## Supported kits (make variable 'TARGET')
 
@@ -168,6 +166,7 @@ Document title: *CE232800* – *XMC&trade; MCU: WDT prewarning*
 | 1.1.0   | Added support for new kits        |
 | 2.0.0   | Updated to support ModusToolbox&trade; software v3.0, CE will not be backwards compatible with previous versions of ModusToolbox™ software       |
 | 2.1.0   | Added support for new kits and WDT personality |
+| 2.1.1   | Updated README        |
 ------
 
 All other trademarks or registered trademarks referenced herein are the property of their respective owners.
